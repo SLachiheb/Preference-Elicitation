@@ -1,0 +1,276 @@
+#include "Matrice.h"
+#include <iostream>
+#include <vector>
+#include <qsopt.h>
+extern "C" {
+	#include <concorde.h>
+}
+using namespace std;
+
+
+Matrice::Matrice() {
+
+}
+
+
+void Matrice::calculMatriceCriteres3D(vector<vector<double>> critereA, vector<vector<double>> critereB, \
+  vector<vector<double>> critereC,vector<vector<double>> critereD,vector<vector<double>> critereE,\
+   vector<vector<double>>critereF, vector<vector<double>>critereG,vector<vector<double>>critereH, \
+	 vector<vector<double>>critereI,vector<vector<double>>critereJ, int nbInstances){
+
+  this->matriceCriteres3D = vector<vector<vector<double>>>(nbInstances);
+  for( int i(0); i < nbInstances; i++){
+    this->matriceCriteres3D[i] = vector<vector<double>>(nbInstances);
+    for (int j(0); j < nbInstances; j++){
+        this->matriceCriteres3D[i][j] = vector<double>(10);
+        this->matriceCriteres3D[i][j][0] = critereA[i][j];
+        this->matriceCriteres3D[i][j][1] = critereB[i][j];
+        this->matriceCriteres3D[i][j][2] = critereC[i][j];
+        this->matriceCriteres3D[i][j][3] = critereD[i][j];
+        this->matriceCriteres3D[i][j][4] = critereE[i][j];
+        this->matriceCriteres3D[i][j][5] = critereF[i][j];
+				this->matriceCriteres3D[i][j][6] = critereG[i][j];
+				this->matriceCriteres3D[i][j][7] = critereH[i][j];
+				this->matriceCriteres3D[i][j][8] = critereI[i][j];
+				this->matriceCriteres3D[i][j][9] = critereJ[i][j];
+    }
+  }
+}
+
+
+void Matrice::calculMatriceCriteres2DOpt(int nbInstances, int nbCriteres, vector<double>poidsDecideur){
+
+  this->matriceCriteres2Dopt = vector<vector<double>>(nbInstances);
+  for( int i(0); i < nbInstances; i++){
+    this->matriceCriteres2Dopt[i] = vector<double>(nbInstances);
+    for (int j(0); j < nbInstances; j++){
+        double som = 0;
+				for (int k(0); k < nbCriteres; k++) {
+        	som += this->matriceCriteres3D[i][j][k] * poidsDecideur[k];
+				}
+        this->matriceCriteres2Dopt[i][j] = som;
+
+        if (i == j){
+          this->matriceCriteres2Dopt[i][j] = 0;
+        }
+    }
+  }
+}
+
+
+void Matrice::calculMatricePointsDeparts(int nbCriteres, int nbPoints){
+
+  this->matricePointsDeparts = vector<vector<double>>(nbPoints);
+	vector<float> nbAlea(nbCriteres + 1, 0);
+	float tmp(0);
+
+	for(int j(0); j < nbPoints; j++){
+		this->matricePointsDeparts[j] = vector<double>(nbCriteres);
+		nbAlea[nbCriteres] = 1;
+		for(int i(1); i < nbCriteres; i++){
+			nbAlea[i] = ((float)rand() / (float)RAND_MAX);
+		}
+		float tmp2(0);
+
+		for(int i(0); i < nbAlea.size(); i++)
+			{
+				for(int j(0); j < nbAlea.size(); j++)
+					{
+						if(nbAlea[i] < nbAlea[j])
+							{
+								tmp2 = nbAlea[i];
+								nbAlea[i] = nbAlea[j];
+								nbAlea[j] = tmp2;
+								j--;
+							}
+						}
+					}
+
+		for (int i(1); i < nbCriteres + 1; i++){
+			this->matricePointsDeparts[j][i - 1] = nbAlea[i] - nbAlea[i - 1];
+	//		int entier = (int)((0.005 + (nbAlea[i] - nbAlea[i - 1])) * 100.0);
+	//		this->matricePointsDeparts[j][i - 1] = (double)entier / 100.0;
+		}
+	}
+}
+
+
+vector<vector<int>> Matrice::deuxOptimisation(vector<int> path, int n)
+{
+	vector<int> tmp;
+	tmp = path;
+  vector<vector<int>> paths;
+	int v1, v2, u1, u2;
+  int cpt = 0;
+	paths.push_back(vector<int>(n));
+	for(int k(0); k < n; k++){
+		paths[cpt][k] = path[k];
+	}
+	cpt++;
+	// Itération sur chaque arête
+	for (int i = 0; i < n - 1; i++)
+	{
+		path = tmp;
+
+		// first edge
+		u1 = i;
+		v1 = (i+1) % n;
+
+		// avec les aretes non adjacentes
+		for (int j = i + 2; j < n; j++)
+		{
+			path = tmp;
+
+			u2 = j % n;
+			v2 = (j+1) % n;
+
+			// Swap u1--v1 et u2--v2
+      int start = i + 1;
+      int end = j;
+
+      while (end - start > 0)
+    	{
+    		int temp = path[start % n];
+    		path[start % n] = path[end % n];
+    		path[end % n] = temp;
+    		start++;
+    		end--;
+    	}
+      paths.push_back(vector<int>(n));
+      for(int k(0); k < n; k++){
+        paths[cpt][k] = path[k];
+      }
+      cpt++;
+		}
+	}
+  return paths;
+}
+
+
+
+vector<vector<int>> Matrice::troisOptimisation(vector<int> path, int n)
+{
+  vector<vector<int>> paths;
+	int v1, v2, u1, u2, w1, w2;
+  int cpt = 0;
+	paths.push_back(vector<int>(n));
+	// On met le tour original dans les chemins possibles, principe de la RL
+	for(int k(0); k < n; k++){
+		paths[cpt][k] = path[k];
+	}
+	cpt++;
+
+	// Itération sur chaque arête
+	for (int i = 0; i < n; i++){
+	//	cout << " i" << i << endl;
+
+		// first edge
+		u1 = i;
+		u2 = (i+1) % n;
+
+		// avec les aretes non adjacentes
+		for (int j = i + 2; j < n; j++){
+		//	cout << " j " <<j << endl;
+
+			v1 = j % n;
+			v2 = (j+1) % n;
+
+			for (int k = j + 2; k < n; k++){
+			//	cout << " k " << k << endl;
+				w1 = k % n;
+				w2 = (k+1) % n;
+
+				// Changement u1-v1 et u2-w1 et v2-w2
+      	int start = i + 1;
+      	int end = j;
+				int tmp;
+
+      	while (end - start > 0)
+    		{
+			//		cout <<"hello" << endl;
+    			tmp = path[start % n];
+    			path[start % n] = path[end % n];
+    			path[end % n] = tmp;
+    			start++;
+    			end--;
+    		}
+				start = j + 1;
+				end = k;
+
+				while (end - start > 0)
+				{
+				//	cout << "hello2" << endl;
+					tmp = path[start % n];
+					path[start % n] = path[end % n];
+					path[end % n] = tmp;
+					start++;
+					end--;
+				}
+      	paths.push_back(vector<int>(n));
+      	for(int l(0); l < n; l++){
+        	paths[cpt][l] = path[l];
+		//			cout << paths[cpt][l] << " ";
+      	}
+			//	cout << endl;
+      	cpt++;
+			}
+		}
+	}
+  return paths;
+}
+
+
+
+void Matrice::genFileCostLKC(int nbInstances, int nbCriteres, vector<double> weightSet,vector<vector<vector<double>>> mat){
+
+   int i,j,k;
+   double cost;
+//     printf("file creation\n");
+   FILE *fout = fopen("aggregCost.tsp","w");
+   if (fout==NULL){
+     fprintf(stderr, "Impossible to open the aggregCost file");
+     return;
+   }
+   fprintf(fout,"NAME: aggregCost\n");
+   fprintf(fout,"TYPE: TSP\n");
+   fprintf(fout,"COMMENT: Weight=(");
+   for (i=0;i<nbCriteres-1;i++)
+     fprintf(fout,"%.2f ",weightSet[i]);
+   fprintf(fout,"%.2f)\n",weightSet[nbCriteres-1]);
+   fprintf(fout,"DIMENSION: %d\n",nbInstances);
+   fprintf(fout,"EDGE_WEIGHT_TYPE: EXPLICIT\n");
+   fprintf(fout,"EDGE_WEIGHT_FORMAT: UPPER_ROW\n");
+   fprintf(fout,"EDGE_WEIGHT_SECTION\n");
+   for (i=0;i<nbInstances-1;i++){
+     for (j=i+1;j<nbInstances-1;j++){
+       cost=0;
+       for (k=0;k<nbCriteres;k++)
+         cost=cost+weightSet[k]*(mat[i][j][k]);
+       fprintf(fout,"%lu ",lround(cost));
+     }
+     cost=0;
+     for (k=0;k<nbCriteres;k++)
+cost=cost+weightSet[k]*mat[i][nbInstances-1][k];
+     fprintf(fout,"%lu\n",lround(cost));
+   }
+   fclose(fout);
+}
+
+
+
+
+std::vector<std::vector<std::vector<double>>> Matrice::getMatriceCriteres3D() {
+    return this->matriceCriteres3D;
+}
+
+std::vector<std::vector<double>> Matrice::getMatriceCriteres2D() {
+    return this->matriceCriteres2D;
+}
+
+std::vector<std::vector<double>> Matrice::getMatriceCriteres2Dopt() {
+    return this->matriceCriteres2Dopt;
+}
+
+std::vector<std::vector<double>> Matrice::getMatricePointsDeparts() {
+    return this->matricePointsDeparts;
+}

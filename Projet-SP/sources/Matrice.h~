@@ -1,0 +1,53 @@
+#ifndef MATRICE_H
+#define MATRICE_H
+
+#include <iostream>
+#include <sstream>
+#include <fstream>
+#include <string>
+#include <map>
+#include <vector>
+#include <cmath>
+#include <iostream>
+#include <vector>
+#include <qsopt.h>
+extern "C" {
+	#include <concorde.h>
+}
+
+
+using namespace std;
+
+class Matrice {
+  private :
+
+  vector< vector<vector<double>>> matriceCriteres3D;
+  vector<vector<double>> matriceCriteres2D;
+	vector<vector<double>> matriceCriteres2Dopt;
+	vector<vector<double>> matricePointsDeparts;
+
+  public :
+
+  Matrice();
+
+	void calculMatriceCriteres3D(vector<vector<double>>, vector<vector<double>>, vector<vector<double>>,\
+    vector<vector<double>>,vector<vector<double>>, vector<vector<double>>,vector<vector<double>>, vector<vector<double>>,\
+		vector<vector<double>>,vector<vector<double>>, int);
+
+	void calculMatriceCriteres2DOpt(int, int, vector<double>);
+
+	vector<vector<int>> deuxOptimisation(vector<int>, int);
+	vector<vector<int>> troisOptimisation(vector<int>, int);
+
+	void calculMatricePointsDeparts(int, int);
+
+	void genFileCostLKC(int, int,vector<double>, vector<vector<vector<double>>>);
+
+  vector<vector<vector<double>>> getMatriceCriteres3D();
+	vector<vector<double>> getMatriceCriteres2Dopt();
+  vector<vector<double>> getMatriceCriteres2D();
+	vector<vector<double>>getMatricePointsDeparts();
+
+};
+
+#endif

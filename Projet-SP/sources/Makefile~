@@ -1,0 +1,79 @@
+#------------------------------------------------------------
+#
+# Please define an environnement variable PATHTUTOMIP
+# equal to the XXX directory where Lemon,Graphviz and Cplex have been installed
+# In order to these:
+# edit ~/.bashrc add "export PATHTUTOMIP=XXX"
+# close your xterm and star new ones
+#
+#------------------------------------------------------------
+
+CPLEXDIR      = $(PATHTUTOMIP)/cplex-12.7.1/cplex
+CONCERTDIR    = $(PATHTUTOMIP)/cplex-12.7.1/concert
+LEMONDIR      = $(PATHTUTOMIP)/lemon-1.3.1
+CONCORDE      =/home/leroyc/Documents/concorde
+QSOPT         =/home/leroyc/Documents/qsopt64
+
+SYSTEM     = x86-64_linux
+LIBFORMAT  = static_pic
+
+
+# ---------------------------------------------------------------------
+# Compiler selection
+# ---------------------------------------------------------------------
+
+CCC = g++ -O0
+
+
+# ---------------------------------------------------------------------
+# Compiler options
+# ---------------------------------------------------------------------
+
+CCOPT = -g -w -m64 -O -fPIC -fno-strict-aliasing -fexceptions -DNDEBUG -DIL_STD -Wno-ignored-attributes
+
+# ---------------------------------------------------------------------
+# Link options and libraries
+# ---------------------------------------------------------------------
+
+CPLEXBINDIR   = $(CPLEXDIR)/bin/$(BINDIST)
+CPLEXLIBDIR   = $(CPLEXDIR)/lib/$(SYSTEM)/$(LIBFORMAT)
+CONCERTLIBDIR = $(CONCERTDIR)/lib/$(SYSTEM)/$(LIBFORMAT)
+
+CCLNDIRS  = -L$(CPLEXLIBDIR) -L$(CONCERTLIBDIR) 
+
+
+CONCERTINCDIR = $(CONCERTDIR)/include
+CPLEXINCDIR   = $(CPLEXDIR)/include
+LEMONINCDIR   = $(LEMONDIR)/include
+
+CCLNFLAGS = -lconcert -lilocplex -lcplex  -lm -lpthread -lm -lpthread -ldl
+
+CCFLAGS = $(CCOPT) -I$(CPLEXINCDIR) -I$(CONCERTINCDIR) -I$(LEMONINCDIR)
+
+
+# ---------------------------------------------------------------------
+# Project
+# ---------------------------------------------------------------------
+
+all: executable
+
+main.o : main.cpp Data.h Matrice.h
+	$(CCC) -c $(CCFLAGS) $(CCLNDIRS) -c main.cpp -o main.o
+
+Data.o : Data.cpp Data.h
+	$(CCC) -c $(CCFLAGS) $(CCLNDIRS) -c Data.cpp -o Data.o
+
+Matrice.o : Matrice.cpp Matrice.h
+	$(CCC) -c $(CCFLAGS) $(CCLNDIRS)  -c Matrice.cpp -o Matrice.o
+
+CSS.o : CSS.cpp CSS.h
+	$(CCC) -c $(CCFLAGS) $(CCLNDIRS)  -c CSS.cpp -o CSS.o
+
+ParetoOpt.o : ParetoOpt.cpp ParetoOpt.h
+	$(CCC) -c $(CCFLAGS) $(CCLNDIRS)  -c ParetoOpt.cpp -o ParetoOpt.o
+
+executable : main.o Data.o Matrice.o CSS.o ParetoOpt.o 
+		$(CCC) $(CCFLAGS) $(CCLNDIRS)  main.o Data.o Matrice.o CSS.o ParetoOpt.o $(CCLNFLAGS) -o executable
+
+clean:
+	rm -f *.o executable

@@ -1,0 +1,450 @@
+#include "Data.h"
+#include "CSS.h"
+#include "Matrice.h"
+#include "ParetoOpt.h"
+#include <ctime>
+#include <cstdlib>
+#include <iostream>
+#include <random>
+#include <vector>
+#include <algorithm>
+#include <cmath>
+#include <chrono>
+
+using namespace std;
+using namespace std::chrono;
+
+
+bool comparer(pair<int, double> p1, pair<int, double> p2){
+  return p1.second > p2.second;
+}
+
+vector<double> valeurSac(vector<int> sac, vector<vector<double>> mat){
+  vector<double> val(mat[0].size(), 0);
+  for(int i(0); i < sac.size(); i++){
+    if(sac[i] == 1){
+      for(int j(0); j < mat[0].size(); j++)
+	val[j] += mat[i][j];
+    }
+  }
+  sort(val.begin(), val.end(), std::greater<>());
+  return val;
+}
+
+
+int minDist(vector<vector<double>> liste, vector<double> best){
+  vector<double> distances(liste.size());
+  int res(0);
+  double valeurTmp(0);
+
+  for (int i(0); i < liste.size(); i++){
+    valeurTmp = 0;
+    for(int k(0); k < liste[i].size(); k++){
+      valeurTmp += abs((liste[i][k] - best[k]) * (liste[i][k] - best[k]));
+    }
+    distances[i] = valeurTmp;
+  }
+  for (int i(0); i < liste.size(); i++)
+    if( distances[i] < distances[res] )
+      res = i;
+
+  return res;
+}
+
+
+vector<vector<int>> voisinage(vector<int> tour){
+  vector<vector<int>> res;
+  vector<int> tmp(tour.size());
+  vector<int> tmp2(tour.size());
+  res.push_back(tour);
+
+  for(int i(0); i < tour.size(); i++){
+    if(tour[i] == 1){
+      tmp = tour;
+      tmp[i] = 0;
+      for(int j(0); j < tour.size(); j++){
+	tmp2 = tmp;
+	if(tour[j] == 0){
+	  tmp2[j] = 1;
+	  res.push_back(tmp2);
+	}
+      }
+    }
+  }
+  return res;
+}
+
+vector<double> run(int nbInstances, int nbCriteres, vector<double> poidsDecideur, vector<vector<int>> sacInitiaux, CSS strategie, vector<vector<double>> mat, int K){
+  //=============================== Création de la matrice 2D pour avoir la valeur optimal pour les poids caché du décideur ======================================
+
+  double old, val(0);
+  vector<double> criteres(nbCriteres, 0);
+  vector<vector<double>> listeCriteres(K);
+
+  for(int i(0); i < K; i++){
+    criteres = valeurSac(sacInitiaux[i], mat);
+    listeCriteres.push_back(criteres);
+    for(int i(0); i < criteres.size(); i++)
+      val += criteres[i] * poidsDecideur[i];
+    if(val < old)
+      old = val;
+  }
+  //=============================== Lancement du chrono de l'algorithme ======================================
+  clock_t start, end;
+  double elapsed;
+  start = clock();
+
+
+  //=============================== Boucle GRASP ======================================
+
+  vector<vector<double>> resultats;
+  int it(0);
+  ParetoOpt paretoOpt;
+  double nbQuestion(0);
+  resultats.push_back(vector<double>(2));
+  resultats[it][0] = 0;
+  resultats[it][1] = old;
+  it++;
+  int nbIteration = 0;
+
+  do {
+
+    //	cout << "koko"<<endl;
+    //	for(int i(0); i < sacInitiaux.size(); i++){
+    //		for(int j(0); j < sacInitiaux[i].size(); j++){
+    //			cout << sacInitiaux[i][j] << " ";
+    //		}
+    //		cout << endl;
+    //	}
+
+    resultats.push_back(vector<double>(2));
+
+    vector<vector<int>> sacVoisins, tmp2;
+    sacVoisins = voisinage(sacInitiaux[0]);
+    //	cout << sacVoisins.size() << endl;
+    for(int i(1); i < K; i++){
+      tmp2 = voisinage(sacInitiaux[i]);
+      sacVoisins.insert(sacVoisins.end(), tmp2.begin(), tmp2.end());
+    }
+
+    //	cout << " size "<< sacVoisins.size() << endl;
+
+    vector <vector<double>> listeGraphes(sacVoisins.size());
+    for(int i(0); i < sacVoisins.size(); i++)
+      listeGraphes[i] = valeurSac(sacVoisins[i], mat);
+
+
+    // for(int i(0); i < listeGraphes.size(); i++){
+    //  cout << "(" << listeGraphes[i][0] << " ," << listeGraphes[i][1] << ")";
+    //  cout << endl;
+    //}
+
+    double val = 0;
+    for(int i(0); i < listeGraphes.size(); i++){
+      val = 0;
+      for(int j(0); j < nbCriteres; j++)
+	val += listeGraphes[i][j] * poidsDecideur[j];
+      //		cout << val << endl;
+    }
+
+    vector<vector<double>> matParetoOpt;
+    matParetoOpt = paretoOpt.calculParetoFront(listeGraphes, nbInstances, nbCriteres);
+    vector<double> recommandation(2);
+
+    int indiceOpt(-1);
+    double valA(0);
+
+    double sigma = 0;
+    //	cout << " taille pareto : " << matParetoOpt.size() << endl << endl;
+    recommandation = strategie.css_sigma(matParetoOpt, poidsDecideur, nbCriteres, sigma, 0);
+    //	cout<< (int)recommandation[1] << " recommandation " <<endl;
+
+    nbQuestion += recommandation[0];
+
+    for(int i(0); i < poidsDecideur.size(); i++)
+      valA += poidsDecideur[i] * matParetoOpt[(int)recommandation[1]][i];
+    //	cout << "Best valeur : " << valA << endl;
+    for (int i(0); i < listeGraphes.size(); i++){
+      bool tmp(true);
+      for (int j(0); j < nbCriteres; j++){
+	if (listeGraphes[i][j] != matParetoOpt[(int)recommandation[1]][j]){
+	  tmp = false;
+	  break;
+	}
+      }
+      if (tmp){
+	indiceOpt = i;
+	break;
+      }
+    }
+
+    if (matParetoOpt.size() < K){
+      sacInitiaux.clear();
+      for(int j(0); j < matParetoOpt.size(); j++)
+	for(int i(0); i < listeGraphes.size(); i++)
+	  if(matParetoOpt[j] == listeGraphes[i]){
+	    sacInitiaux.push_back(sacVoisins[i]);
+	    break;
+	  }
+      while(sacInitiaux.size() < K)
+	sacInitiaux.push_back(sacVoisins[(int)rand()%(sacVoisins.size())]);
+    }
+    else{
+      sacInitiaux.clear();
+      int best;
+      for(int i(0); i < K; i++){
+	best = minDist(matParetoOpt, matParetoOpt[(int)recommandation[1]]);
+	for(int j(0); j < listeGraphes.size(); j++)
+	  if(matParetoOpt[best] == listeGraphes[j]){
+	    sacInitiaux.push_back(sacVoisins[j]);
+	    break;
+	  }
+	matParetoOpt.erase(matParetoOpt.begin() + best);
+      }
+    }
+
+    resultats[it][0] = nbQuestion;
+    resultats[it][1] = valA;
+    //	cout << "val : " << -valA << endl;
+    //	cout << "nbQ : " << nbQuestion << endl;
+    //	cout << "best : " << -listeGraphes[indiceOpt][0] << " " <<  -listeGraphes[indiceOpt][1] <<endl;
+    it++;
+    nbIteration++;
+    //	sacInitial = sacVoisins[indiceOpt];
+    listeGraphes.clear();
+
+  } while(abs(resultats[it-2][1] - resultats[it-1][1]) != 0);
+
+  end = clock();
+  elapsed = ((double)end - start) / CLOCKS_PER_SEC;
+
+
+  vector <double> resultatFinal(3);
+  resultatFinal[0] = nbQuestion;
+  resultatFinal[1] = nbIteration - 1;
+  resultatFinal[2] = -resultats[resultats.size() - 1][1];
+
+  return resultatFinal;
+}
+
+
+
+void split(const string &chaine, char delimiteur, vector<string> &elements){
+  stringstream ss(chaine);
+  string sousChaine;
+  while (getline(ss, sousChaine, delimiteur))
+    elements.push_back(sousChaine);
+}
+
+vector<string> split(const string &chaine, char delimiteur){
+  vector<string> mots;
+  split(chaine, delimiteur, mots);
+  return mots;
+}
+
+
+/*----------------------------------MAIN------------------------------------------*/
+
+
+int main(){ // OWAAA
+  /*=============================== Initialisation des variables ======================================*/
+  ofstream ofs;
+  string nom_fichier2 = "../test.txt";
+  ofs.open(nom_fichier2, ofstream::out);
+
+  int nbInstances(6);
+  int nbCriteres = 3;
+  int nbMaxObejets = nbInstances/2;
+  int k = 1;
+
+  int nbIterations = 1;
+
+  int nbFichier = 30;
+  int nbFichierCritere = 3;
+
+  vector<vector<double>> resultat(nbIterations);
+  vector<vector<double>> matriceCout(nbInstances);
+  for(int i = 0; i < nbInstances; i++)
+    matriceCout[i] = vector<double>(nbCriteres);
+  /*=============================== Lectures Fichiers et mise en force dans une matrice de distance pour chaque ======================================*/
+
+  ifstream fichier;
+  fichier.open("../InstancesSAC/Data_valMax10/PD_Petit1/dataSelectionPetit1.txt");
+  if (fichier.is_open()) {
+    string ligne;
+    for(int i(0); i < nbInstances; i++) {
+      getline(fichier, ligne);
+      vector<string> mots = split(ligne, ' ');
+      for(int j(0); j < nbCriteres; j++)
+	matriceCout[i][j] = -stoi(mots[j]);
+    }
+  }
+  else
+    cout << "Erreur : Impossible d'ouvrir le fichier " << endl;
+  fichier.close();
+
+
+  vector<vector<double>> pf;
+  fichier.open("../InstancesSAC/Data_valMax10/PD_Petit1/PF_6_3.txt");
+  if (fichier.is_open()) {
+    string ligne;
+    int i = 0;
+    while(getline(fichier, ligne)){
+      pf.push_back(vector<double>(nbCriteres));
+      vector<string> mots = split(ligne, ' ');
+      for(int j(0); j < nbCriteres; j++)
+	pf[i][j] = -stoi(mots[j]);
+      sort(pf[i].begin(), pf[i].end(), greater<>());
+      i++;
+    }
+  }
+  else
+    cout << "Erreur : Impossible d'ouvrir le fichier 2" << endl;
+  fichier.close();
+
+  //	cout << "debut " << endl;
+
+  //	for(int i(0); i < pf.size(); i++)
+  //		cout << "(" << -pf[i][0] << " ," << -pf[i][1] << ")" <<endl;
+  //	cout << "fin " << endl;
+
+  srand(3);
+  vector<vector<double>> listePoidsDecideur(nbIterations);
+  vector<double>poidsDecideur(nbCriteres);
+  for(int j(0); j < nbIterations; j++){
+    listePoidsDecideur[j] = vector<double>(nbCriteres);
+    vector<double> nbAlea(nbCriteres + 1, 0);
+    nbAlea[nbCriteres] = 1;
+    float tmp(0);
+    for(int i(1); i < nbCriteres; i++)
+      nbAlea[i] = ((float)rand() / (float)RAND_MAX);
+    float tmp2(0);
+
+    for(int i(0); i < nbAlea.size(); i++){
+      for(int j(0); j < nbAlea.size(); j++){
+	if(nbAlea[i] < nbAlea[j]){
+	  tmp2 = nbAlea[i];
+	  nbAlea[i] = nbAlea[j];
+	  nbAlea[j] = tmp2;
+	  j--;
+	}
+      }
+    }
+    for (int i(1); i < nbCriteres + 1; i++)
+      listePoidsDecideur[j][i - 1] = nbAlea[i] - nbAlea[i - 1];
+  }
+
+
+  /*=============================== Boucle ======================================*/
+
+  for(int i(0); i < nbIterations; i++){
+    cout << "---------------  " << i << endl;
+    poidsDecideur = listePoidsDecideur[i];
+    sort(poidsDecideur.begin(), poidsDecideur.end(), greater<>());
+    //	cout << poidsDecideur[0] << " " << poidsDecideur[1] <<endl;
+    vector<int> tab(nbInstances);
+    vector<vector<int>> sacInitiaux;
+    vector<int> sacInitial(nbInstances, 0);
+    int indice(-1);
+    for(int j(0); j < k; j++){
+      tab.clear();
+      tab.resize(nbInstances);
+      for(int i(0); i < nbInstances; i++)
+	tab[i] = i;
+
+      sacInitial.clear();
+      sacInitial.resize(nbInstances, 0);
+      indice = -1;
+      for(int i(0); i < nbMaxObejets; i++){
+	indice = (int)rand()%(tab.size());
+	sacInitial[tab[indice]] = 1;
+	tab.erase(tab.begin() + indice);
+      }
+      //		sacInitial = {1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 1, 0, 0, 1};
+      sacInitiaux.push_back(sacInitial);
+    }
+
+    CSS strategie;
+    resultat[i] = vector<double>(3);
+    high_resolution_clock::time_point  start1 = high_resolution_clock::now();
+    resultat[i] = run(nbInstances, nbCriteres, poidsDecideur, sacInitiaux, strategie, matriceCout, k);
+    high_resolution_clock::time_point finish1 = high_resolution_clock::now();
+    duration<double> e1 =(finish1 - start1);
+
+    double val = 0;
+    double res = -1;
+    for(int i(0); i < pf.size(); i++){
+      val = 0;
+      for(int j(0); j < nbCriteres; j++)
+	val += poidsDecideur[j] * pf[i][j];
+      if(val < res){
+	res = val;
+	//	cout << pf[i][0] << " " << pf[i][1] << " " << res << endl;
+      }
+    }
+    res = -res;
+    resultat[i].push_back(res);
+    resultat[i].push_back(((res - resultat[i][2]) / res) * 100);
+    resultat[i].push_back(e1.count());
+
+
+  }
+
+  //=============================== Affichage des résultats ======================================
+  for (int i(0); i < nbIterations; i++){
+    for (int j(0); j < resultat[i].size(); j++){
+      ofs << resultat[i][j] << " ";
+    }
+    ofs << endl;
+  }
+  return 0;
+}
+
+
+
+
+
+//we generate a solution thanks to the "linkern" heuristic
+vector<int> genSolutionLKC(int nbInstances, int nbCriteres, vector<double> weightSet,vector<vector<vector<double>>> mat){
+
+  Matrice m;
+
+  m.genFileCostLKC(nbInstances, nbCriteres, weightSet, mat);
+  system("./linkern -Q -o aggregCost.sol aggregCost.tsp");
+  ifstream fichier("aggregCost.sol", ios::in);
+
+  vector<string> elements;
+  string ligne;
+  while(getline(fichier, ligne))  // tant que l'on peut mettre la ligne dans "contenu"
+    {
+      stringstream ss(ligne);
+      string sousChaine;
+      while (getline(ss, sousChaine, ' ')) {
+	elements.push_back(sousChaine);
+      }
+    }
+  vector<int> tour(nbInstances);
+  tour[0] = stoi(elements[2]);
+  for(int i=1; i < nbInstances; i++){
+    tour[i] = stoi(elements[(i+1)*3-1]);
+  }
+
+  fichier.close();
+  return tour;
+}
+
+
+vector<int> donneTourOptHeuristique(vector< vector<vector<double>>> mat, vector<double> poids, int nbInstances, int nbCriteres){
+
+  vector<int> genSolutionLKC(int nbInstances, int nbCriteres, vector<double> weightSet,vector<vector<vector<double>>> mat);
+  vector<int>tmp;
+  tmp = genSolutionLKC(nbInstances, nbCriteres, poids, mat);
+  return tmp;
+}
+
+
+
+
+
+
+
